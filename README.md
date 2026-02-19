@@ -124,6 +124,7 @@ Dans ce dépôt :
   - `Exercice_1/Configs/Switch3_config.txt`
 - **Captures** : `Exercice_1/Images/*.png`
 
+
 ## Annexes — exports complets
 
 <details>
@@ -420,3 +421,115 @@ line vty 5 15
 end
 ```
 </details>
+
+---
+
+# Exercice 02 (Active Directory)
+
+> **Disclaimer — Environnement de travail**
+> Cet exercice nécessite un Windows Server. Étant sur macOS, il m'est impossible d'exécuter Windows Server nativement. J'ai donc mis en place un serveur **Proxmox VE** (hyperviseur bare-metal open-source) sur lequel j'ai déployé une machine virtuelle **Windows Server 2022** pour réaliser l'intégralité de l'exercice.
+
+## Environnement
+
+| Composant | Détail |
+|---|---|
+| Hyperviseur | Proxmox VE |
+| OS invité | Windows Server 2022 |
+| Domaine AD | `laplateforme.io` |
+| Outil utilisé | PowerShell (Administrateur) |
+
+![Arborescence Proxmox](Exercice_2/Images/Proxmox_arborescence.png)
+![Informations Hardware](Exercice_2/Images/Information_Hardware.png)
+
+## Étape 1 — Installation d'Active Directory
+
+Le script `01_install_AD.ps1` installe le rôle AD DS puis promeut le serveur en contrôleur de domaine. Le serveur redémarre automatiquement à la fin.
+
+```powershell
+Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
+
+$password = ConvertTo-SecureString "Azerty_2025!" -AsPlainText -Force
+
+Install-ADDSForest `
+    -DomainName "laplateforme.io" `
+    -DomainNetbiosName "LAPLATEFORME" `
+    -SafeModeAdministratorPassword $password `
+    -InstallDns $true `
+    -Force $true
+```
+
+![Création du domaine AD](Exercice_2/Images/Create_AD.png)
+![Serveur promu contrôleur de domaine](Exercice_2/Images/Serveur_Domain.png)
+
+## Étape 2 — Peuplement de l'AD
+
+Après redémarrage, le script `02_populate_AD.ps1` crée les OU, les groupes et les utilisateurs depuis le fichier `users.csv`.
+
+```powershell
+Import-Module ActiveDirectory
+
+$domainDN  = "DC=laplateforme,DC=io"
+$ouRoot    = "OU=LaPlateforme,$domainDN"
+$ouUsers   = "OU=Utilisateurs,$ouRoot"
+$ouGroups  = "OU=Groupes,$ouRoot"
+$password  = ConvertTo-SecureString "Azerty_2025!" -AsPlainText -Force
+$csvPath   = "$PSScriptRoot\users.csv"
+
+New-ADOrganizationalUnit -Name "LaPlateforme" -Path $domainDN
+New-ADOrganizationalUnit -Name "Utilisateurs" -Path $ouRoot
+New-ADOrganizationalUnit -Name "Groupes"      -Path $ouRoot
+
+$users = Import-Csv -Path $csvPath -Encoding UTF8
+
+$groups = @()
+foreach ($user in $users) {
+    for ($i = 1; $i -le 6; $i++) {
+        $g = $user."groupe$i"
+        if ($g -and $g -ne "" -and $groups -notcontains $g) {
+            $groups += $g
+        }
+    }
+}
+
+foreach ($g in $groups) {
+    New-ADGroup -Name $g -GroupScope Global -GroupCategory Security -Path $ouGroups
+}
+
+foreach ($user in $users) {
+    $sam  = $user.prénom.Substring(0,1).ToLower() + "." + $user.nom.ToLower()
+    $sam  = $sam -replace "[^a-z0-9\.]", ""
+
+    New-ADUser `
+        -Name                  "$($user.prénom) $($user.nom)" `
+        -GivenName             $user.prénom `
+        -Surname               $user.nom `
+        -SamAccountName        $sam `
+        -UserPrincipalName     "$sam@laplateforme.io" `
+        -AccountPassword       $password `
+        -ChangePasswordAtLogon $true `
+        -Enabled               $true `
+        -Path                  $ouUsers
+
+    for ($i = 1; $i -le 6; $i++) {
+        $g = $user."groupe$i"
+        if ($g -and $g -ne "") {
+            Add-ADGroupMember -Identity $g -Members $sam
+        }
+    }
+}
+```
+
+![Import CSV des utilisateurs](Exercice_2/Images/User_csv.png)
+![AD peuplé](Exercice_2/Images/Populated_AD.png)
+
+## Livrables
+
+Dans ce dépôt :
+- **README** : ce document
+- **Script 01** : [`Exercice_2/Scripts/01_install_AD.ps1`](Exercice_2/Scripts/01_install_AD.ps1)
+- **Script 02** : [`Exercice_2/Scripts/02_populate_AD.ps1`](Exercice_2/Scripts/02_populate_AD.ps1)
+- **Fichier CSV** : [`Exercice_2/Scripts/users.csv`](Exercice_2/Scripts/users.csv)
+- **Captures** : `Exercice_2/Images/*.png`
+
+---
+
