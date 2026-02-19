@@ -1,5 +1,13 @@
 # Documentation — Test MSc Cyber
 
+## Sommaire
+
+- [Exercice 01 — Packet Tracer](#exercice-01-packet-tracer)
+- [Exercice 02 — Active Directory](#exercice-02-active-directory)
+- [Exercice 03 — Docker WordPress](#exercice-03-docker--wordpress)
+
+---
+
 # Exercice 01 (Packet Tracer)
 
 ## Introduction
@@ -426,8 +434,9 @@ end
 
 # Exercice 02 (Active Directory)
 
-> **Disclaimer — Environnement de travail**
-> Cet exercice nécessite un Windows Server. Étant sur macOS, il m'est impossible d'exécuter Windows Server nativement. J'ai donc mis en place un serveur **Proxmox VE** (hyperviseur bare-metal open-source) sur lequel j'ai déployé une machine virtuelle **Windows Server 2022** pour réaliser l'intégralité de l'exercice.
+**Disclaimer — Environnement de travail**
+
+Cet exercice nécessite un Windows Server. Étant sur macOS, il m'est impossible d'exécuter Windows Server nativement. J'ai donc mis en place un serveur **Proxmox VE** sur lequel j'ai déployé une machine virtuelle **Windows Server 2022** pour réaliser l'intégralité de l'exercice.
 
 ## Environnement
 
@@ -532,4 +541,130 @@ Dans ce dépôt :
 - **Captures** : `Exercice_2/Images/*.png`
 
 ---
+
+# Exercice 03 (Docker — WordPress)
+
+## Objectif
+
+Déployer WordPress en isolant chaque rôle dans un container dédié, reliés entre eux via un réseau Docker interne et un volume partagé.
+
+## Stack
+
+| Container | Image | Rôle |
+|---|---|---|
+| `nginx` | `nginx:alpine` | Reçoit les requêtes HTTP (port 80). Sert les fichiers statiques directement et délègue le PHP au container `php` via FastCGI. |
+| `php` | `wordpress:php8.3-fpm` | Exécute le code PHP de WordPress (PHP-FPM sur le port 9000). Se connecte à `mariadb` pour lire et écrire les données. |
+| `mariadb` | `mariadb:latest` | Base de données SQL. Stocke tout le contenu WordPress : articles, utilisateurs, paramètres. |
+
+Les 3 images sont téléchargées automatiquement au premier `docker compose up` :
+
+![Images Docker téléchargées](Exercice_3/Images/Images_Docker.png)
+
+## Volumes
+
+Deux volumes nommés sont créés pour que les données **persistent** même si les containers sont supprimés ou redémarrés :
+
+- **`files_wp_data`** (39,9 MB) — monté dans `nginx` **et** `php` sur `/var/www/html`. C'est le **volume commun** : nginx y lit les fichiers statiques, php y exécute les fichiers WordPress. Les deux containers partagent exactement le même dossier.
+- **`files_db_data`** — monté uniquement dans `mariadb` sur `/var/lib/mysql`. Contient toutes les données SQL.
+
+![Volumes créés](Exercice_3/Images/Volumes_Docker.png)
+
+## Fichiers
+
+### `docker-compose.yaml`
+
+```yaml
+services:
+
+  mariadb:
+    image: mariadb:latest
+    restart: always
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+      MYSQL_ROOT_PASSWORD: rootpassword
+    volumes:
+      - db_data:/var/lib/mysql
+
+  php:
+    image: wordpress:php8.3-fpm
+    restart: always
+    environment:
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+    volumes:
+      - wp_data:/var/www/html
+    depends_on:
+      - mariadb
+
+  nginx:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - wp_data:/var/www/html
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - php
+
+volumes:
+  db_data:
+  wp_data:
+```
+
+`depends_on` garantit l'ordre de démarrage : `mariadb` → `php` → `nginx`.
+
+### `nginx.conf`
+
+```nginx
+server {
+    listen 80;
+    root /var/www/html;
+    index index.php;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass    php:9000;
+        fastcgi_index   index.php;
+        include         fastcgi_params;
+        fastcgi_param   SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+```
+
+`try_files` cherche d'abord un fichier statique correspondant à l'URL ; si rien ne correspond, il renvoie vers `index.php` (c'est ainsi que WordPress gère ses URLs propres). `fastcgi_pass php:9000` transmet les fichiers `.php` au container `php` via le réseau Docker interne.
+
+## Lancement
+
+```bash
+cd Exercice_3/Files
+docker compose up -d
+```
+
+Les 3 containers démarrent en arrière-plan :
+
+![Containers en cours d'exécution](Exercice_3/Images/Containers_Docker.png)
+
+WordPress est accessible sur `http://localhost`. L'assistant d'installation apparaît au premier lancement pour définir le nom du site, l'utilisateur admin et le mot de passe.
+
+![Interface WordPress — tableau de bord](Exercice_3/Images/Wordpress_Interface.png)
+
+## Livrables
+
+Dans ce dépôt :
+- **README** : ce document
+- **docker-compose** : [`Exercice_3/Files/docker-compose.yaml`](Exercice_3/Files/docker-compose.yaml)
+- **Config nginx** : [`Exercice_3/Files/nginx.conf`](Exercice_3/Files/nginx.conf)
+- **Captures** : `Exercice_3/Images/*.png`
 
