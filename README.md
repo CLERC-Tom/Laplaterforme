@@ -1,19 +1,15 @@
-# Documentation — Test MSc Cyber — Exercice 01 (Packet Tracer)
+# Documentation — Test MSc Cyber
+
+# Exercice 01 (Packet Tracer)
 
 ## Introduction
-Dans le cadre de la validation des compétences techniques pour intégrer le **MSc Cyber**, l’objectif de cet exercice est de créer et configurer un **miniLab Packet Tracer** avec :
-- **Segmentation en VLAN**
-- **Adressage + DHCP par VLAN**
-- **Routage inter-VLAN** (router-on-a-stick)
-- **Tests de connectivité** (entre VLAN + “accès Internet” selon la maquette)
 
 Le dépôt contient :
 - les **exports de configuration** des équipements (`Exercice_1/Configs/`)
 - les **captures d’écran** (`Exercice_1/Images/`)
 
-> Remarque : je ne vois pas de fichier Packet Tracer `.pkt` dans le dépôt à l’instant (\*.pkt introuvable). Si tu l’ajoutes plus tard, je te conseille de le placer à `Exercice_1/` et de l’indiquer dans la section **Livrables**.
-
 ## Matériel et topologie
+
 **Équipements utilisés**
 - 1 routeur **Cisco 1941**
 - 3 switches **Switch-PT**
@@ -43,6 +39,7 @@ Le principe est identique sur les 3 switches : même répartition des ports et m
 - **VLAN 30** : Administration
 
 ### Mapping ports (Packet Tracer)
+
 Sur les switches Packet Tracer, les interfaces apparaissent au format `FastEthernetX/1`.
 L’équivalence “port” \(\rightarrow\) interface utilisée dans les configs est :
 - **Port 1** \(\rightarrow\) `FastEthernet0/1` (**TRUNK** vers routeur / uplink)
@@ -75,12 +72,12 @@ Le routeur 1941 joue les rôles suivants :
 ### DHCP
 Les configs excluent `x.x.x.1` à `x.x.x.9` (réservés passerelles + éventuels statiques), donc les baux démarrent à **.10**.
 
-> Si tu dois strictement respecter une plage `192.168.x.10` à `192.168.x.50`, il faut aussi exclure `192.168.x.51` à `192.168.x.254`. (Actuellement, la config DHCP autorise .10 → .254.)
 
 ### Preuve de configuration routeur (capture)
 ![Configuration routeur (sous-interfaces + DHCP)](Exercice_1/Images/Routeur_configuration.png)
 
 ## Routage inter‑VLAN (Router-on-a-stick)
+
 Le trunk entre le switch et le routeur transporte les VLAN 1/10/20/30.
 Le routage se fait via les sous‑interfaces :
 - `G0/0.1` : VLAN 1 **native**, IP `192.168.0.1/24`
